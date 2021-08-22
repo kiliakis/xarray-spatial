@@ -49,7 +49,13 @@ if __name__ == '__main__':
 
     if args.gpu is True:
         import cupy
-        terrain.data = xr.DataArray(cupy.asarray(terrain.data))
+        gpu_terrain = xr.DataArray(cupy.array(terrain.data), 
+            name=terrain.name, 
+            coords=terrain.coords,
+            dims=terrain.dims,
+            attrs=terrain.attrs)
+        terrain=gpu_terrain
+        #terrain.data = xr.DataArray(cupy.array(terrain.data))
 
     # src = terrain.data
     freq = (1, 1)

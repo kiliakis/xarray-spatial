@@ -106,18 +106,9 @@ def _fade_gpu(t):
 
 
 @cuda.jit(device=True)
-def _gradient_gpu(h, x, y, vec):
-    # vectors = np.array([[0, 1], [0, -1], [1, 0], [-1, 0]])
-    f = cupy.mod(h, 4)
+def _gradient_gpu(vec, h, x, y):
+    f = h % 4
     return vec[f][0] * x + vec[f][1] * y
-    # dim_ = h.shape
-    # out = np.zeros(dim_)
-    # for j in range(dim_[1]):
-    #     for i in range(dim_[0]):
-    #         f = np.mod(h[i, j], 4)
-    #         g = vectors[f]
-    #         out[i, j] = g[0] * x[i, j] + g[1] * y[i, j]
-    # return out
 
 
 @cuda.jit
@@ -151,15 +142,15 @@ def _perlin_gpu(p, vec, freq0, freq1, out):
         v = _fade_gpu(yf)
 
         # noise components
-        n00 = _gradient(vec, p[p[x_int]+y_int], xf, yf)
-        n01 = _gradient(vec, p[p[x_int]+y_int+1], xf, yf-1)
-        n11 = _gradient(vec, p[p[x_int+1]+y_int+1], xf-1, yf-1)
-        n10 = _gradient(vec, p[p[x_int+1]+y_int], xf-1, yf)
+        n00 = _gradient_gpu(vec, p[p[x_int]+y_int], xf, yf)
+        n01 = _gradient_gpu(vec, p[p[x_int]+y_int+1], xf, yf-1)
+        n11 = _gradient_gpu(vec, p[p[x_int+1]+y_int+1], xf-1, yf-1)
+        n10 = _gradient_gpu(vec, p[p[x_int+1]+y_int], xf-1, yf)
 
         # combine noises
-        x1 = _lerp(n00, n10, u)
-        x2 = _lerp(n01, n11, u)
-        a = _lerp(x1, x2, v)
+        x1 = _lerp_gpu(n00, n10, u)
+        x2 = _lerp_gpu(n01, n11, u)
+        a = _lerp_gpu(x1, x2, v)
         out[i, j] = a
     # return a
 
@@ -178,7 +169,7 @@ def _run_cupy(data: cupy.ndarray,
 
     p = cupy.arange(2**20, dtype=int)
     cupy.random.seed(seed)
-    p = cupy.random.shuffle(p)
+    cupy.random.shuffle(p)
     p = cupy.append(p, p)
 
     griddim, blockdim = cuda_args(data.shape)
@@ -194,21 +185,7 @@ def _run_cupy(data: cupy.ndarray,
     # out = (out - np.min(out))/np.ptp(out)
     return data
 
-    # cellsize_x_arr = cupy.array([float(cellsize_x)], dtype='f4')
-    # cellsize_y_arr = cupy.array([float(cellsize_y)], dtype='f4')
 
-    # griddim, blockdim = cuda_args(data.shape)
-    # out = cupy.empty(data.shape, dtype='f4')
-    # out[:] = cupy.nan
-
-    # _run_gpu[griddim, blockdim](data,
-    #                             cellsize_x_arr,
-    #                             cellsize_y_arr,
-    #                             out)
-    # return out
-
-
-# TODO: change parameters to take agg instead of height / width
 def perlin(agg: xr.DataArray,
            # width: int,
            # height: int,
