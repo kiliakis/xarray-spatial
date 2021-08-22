@@ -127,8 +127,8 @@ def _perlin_gpu(p, vec, freq0, freq1, out):
     if i < out.shape[0] and j < out.shape[1]:
 
         # coordinates of the top-left
-        x = j * (freq0/out.shape[0])
-        y = i * (freq1/out.shape[0])
+        y = i * (freq0/out.shape[0])
+        x = j * (freq1/out.shape[1])
         
         x_int = int(x)
         y_int = int(y)
