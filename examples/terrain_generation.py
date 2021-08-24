@@ -46,7 +46,6 @@ if __name__ == '__main__':
                     y_range=(-20e6, 20e6))
 
     terrain = generate_terrain(canvas=cvs)
-
     if args.gpu is True:
         import cupy
         gpu_terrain = xr.DataArray(cupy.array(terrain.data), 
@@ -62,17 +61,16 @@ if __name__ == '__main__':
     seed = 0
     start = time.time()
     per = perlin(terrain, freq, seed)
-    end = time.time()
-    print('Warm-up time: {:.3f} sec.'.format(end-start))
-
+    warm_up_sec = time.time() - start
     elapsed_sec = 0
     for i in range(args.iterations):
         start = time.time()
         per = perlin(terrain, freq, seed)
         elapsed_sec += time.time() - start
-
-    print('Total time: {:.3f} sec.'.format(elapsed_sec))
-    print('Time per call: {:.3f} sec.'.format(elapsed_sec/args.iterations))
+    print('Runs,total_time(sec),time_per_run(sec),warm_up_time(sec)')
+    print('{},{:.4f},{:.4f},{:.4f}'.format(
+        args.iterations, elapsed_sec,
+        elapsed_sec/args.iterations, warm_up_sec))
     print('Result: ', per)
 
 

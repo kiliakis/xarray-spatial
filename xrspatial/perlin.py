@@ -5,6 +5,7 @@ from typing import Union
 import numpy as np
 import xarray as xr
 from xarray import DataArray
+import math
 
 try:
     import cupy
@@ -61,17 +62,14 @@ def _perlin(x, y, seed=0):
     # internal coordinates
     xf = x - xi
     yf = y - yi
-
     # fade factors
     u = _fade(xf)
     v = _fade(yf)
-
     # noise components
     n00 = _gradient(p[p[xi]+yi], xf, yf)
     n01 = _gradient(p[p[xi]+yi+1], xf, yf-1)
     n11 = _gradient(p[p[xi+1]+yi+1], xf-1, yf-1)
     n10 = _gradient(p[p[xi+1]+yi], xf-1, yf)
-
     # combine noises
     x1 = _lerp(n00, n10, u)
     x2 = _lerp(n01, n11, u)
@@ -120,19 +118,12 @@ def _perlin_gpu(p, vec, freq0, freq1, out):
         # coordinates of the top-left
         y = i * (freq0/out.shape[0])
         x = j * (freq1/out.shape[1])
-        
+ 
+        # coordinates of the top-left
         x_int = int(x)
         y_int = int(y)
-        # x_int = int(x[i, j])
-        # y_int = int(y[i, j])
 
-        # TODO check here that this will work
-        # coordinates of the top-left
         # internal coordinates
-
-        # xf = x[i, j] - x_int
-        # yf = y[i, j] - y_int
-
         xf = x - x_int
         yf = y - y_int
 
@@ -161,10 +152,6 @@ def _run_cupy(data: cupy.ndarray,
               freq: tuple,
               seed: int) -> cupy.ndarray:
 
-    # is it right to go up to freq?
-    # x = cupy.linspace(0, freq[0], width, endpoint=False)
-    # y = cupy.linspace(0, freq[1], height, endpoint=False)
-    # x, y = cupy.meshgrid(x, y)
     vec = cupy.array([[0, 1], [0, -1], [1, 0], [-1, 0]])
 
     p = cupy.arange(2**20, dtype=int)
@@ -173,16 +160,17 @@ def _run_cupy(data: cupy.ndarray,
     p = cupy.append(p, p)
 
     griddim, blockdim = cuda_args(data.shape)
-    # out = cupy.empty(data.shape, dtype='f4')
-    # out[:] = cupy.nan
+    #threads_per_block = 256
+    #blockdim = (int(math.ceil(threads_per_block**(1.0/len(data.shape)))),) * len(data.shape) 
+    #griddim = tuple(int(math.ceil(d / blockdim[0])) for d in data.shape)
+
+
+    #print("data.shape, griddim, blockdim: ", data.shape, griddim, blockdim)
     _perlin_gpu[griddim, blockdim](p, vec, freq[0], freq[1], data)
 
     minimum = cupy.amin(data)
     maximum = cupy.amax(data)
-    data[:] = (data - minimum) / maximum
-    # data = (data - cupy.min(data)) / cupy.ptp(data)
-    # out = _perlin(x * freq[0], y * freq[1], seed=seed)
-    # out = (out - np.min(out))/np.ptp(out)
+    data[:] = (data - minimum) / (maximum - minimum)
     return data
 
 
@@ -306,11 +294,3 @@ def perlin(agg: xr.DataArray,
     # return xr.DataArray(out, dims=['y', 'x'], attrs=dict(res=1))
     return xr.DataArray(out, dims=agg.dims, attrs=agg.attrs)
 
-    # linx = range(width)
-    # liny = range(height)
-    # linx = np.linspace(0, 1, width, endpoint=False)
-    # liny = np.linspace(0, 1, height, endpoint=False)
-    # x, y = np.meshgrid(linx, liny)
-    # data = _perlin(x * freq[0], y * freq[1], seed=seed)
-    # data = (data - np.min(data))/np.ptp(data)
-    # return DataArray(data, dims=['y', 'x'], attrs=dict(res=1))
