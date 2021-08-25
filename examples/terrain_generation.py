@@ -67,8 +67,9 @@ if __name__ == '__main__':
         start = time.time()
         per = perlin(terrain, freq, seed)
         elapsed_sec += time.time() - start
-    print('Runs,total_time(sec),time_per_run(sec),warm_up_time(sec)')
-    print('{},{:.4f},{:.4f},{:.4f}'.format(
+    print('HxW,Runs,total_time(sec),time_per_run(sec),warm_up_time(sec)')
+    print('{}x{},{},{:.4f},{:.4f},{:.4f}'.format(
+        H,W,
         args.iterations, elapsed_sec,
         elapsed_sec/args.iterations, warm_up_sec))
     print('Result: ', per)

@@ -16,6 +16,7 @@ except ImportError:
 import dask.array as da
 
 from numba import cuda
+from numba import jit
 
 
 # local modules
@@ -26,17 +27,17 @@ from xrspatial.utils import ngjit
 from xrspatial.utils import is_dask_cupy
 
 
-@ngjit
+@jit(nopython=True, nogil=True, parallel=True)
 def _lerp(a, b, x):
     return a + x * (b-a)
 
 
-@ngjit
+@jit(nopython=True, nogil=True, parallel=True)
 def _fade(t):
     return 6 * t**5 - 15 * t**4 + 10 * t**3
 
 
-@ngjit
+@jit(nopython=True, nogil=True, parallel=True)
 def _gradient(h, x, y):
     vectors = np.array([[0, 1], [0, -1], [1, 0], [-1, 0]])
     dim_ = h.shape
