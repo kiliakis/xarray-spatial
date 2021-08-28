@@ -17,7 +17,7 @@ import dask.array as da
 
 from numba import cuda
 from numba import jit
-
+import numba as nb
 
 # local modules
 from xrspatial.utils import cuda_args
@@ -102,22 +102,26 @@ def _fade_gpu(t):
     return 6 * t**5 - 15 * t**4 + 10 * t**3
 
 
-host_vec = np.array([0, 1, 0, -1, 1, 0, -1, 0], dtype=np.int32)
 
 @cuda.jit(device=True)
-def _gradient_gpu(h, x, y):
-    vec = cuda.const.array_like(host_vec)
+def _gradient_gpu(vec, h, x, y):
     f = h % 4
-    return vec[2 * f] * x + vec[2 * f + 1] * y
+    return vec[f][0] * x + vec[f][1] * y
 
 
 @cuda.jit
 def _perlin_gpu(p, freq0, freq1, out):
     
     i, j = cuda.grid(2)
-    if i < out.shape[0] and j < out.shape[1]:
 
-        # coordinates of the top-left
+    # alloc and initialize vec array
+    vec = cuda.local.array((4, 2), nb.int32)
+    vec[0][0] = vec[1][0] = vec[2][1] = vec[3][1] = 0
+    vec[0][1] = vec[2][0] = 1
+    vec[1][1] = vec[3][0] = -1
+   
+    if i < out.shape[0] and j < out.shape[1]:
+       # coordinates of the top-left
         y = i * (freq0/out.shape[0])
         x = j * (freq1/out.shape[1])
  
@@ -135,10 +139,10 @@ def _perlin_gpu(p, freq0, freq1, out):
         v = _fade_gpu(yf)
 
         # noise components
-        n00 = _gradient_gpu(p[p[x_int]+y_int], xf, yf)
-        n01 = _gradient_gpu(p[p[x_int]+y_int+1], xf, yf-1)
-        n11 = _gradient_gpu(p[p[x_int+1]+y_int+1], xf-1, yf-1)
-        n10 = _gradient_gpu(p[p[x_int+1]+y_int], xf-1, yf)
+        n00 = _gradient_gpu(vec, p[p[x_int]+y_int], xf, yf)
+        n01 = _gradient_gpu(vec, p[p[x_int]+y_int+1], xf, yf-1)
+        n11 = _gradient_gpu(vec, p[p[x_int+1]+y_int+1], xf-1, yf-1)
+        n10 = _gradient_gpu(vec, p[p[x_int+1]+y_int], xf-1, yf)
 
         # combine noises
         x1 = _lerp_gpu(n00, n10, u)
