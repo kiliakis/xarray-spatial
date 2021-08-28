@@ -49,7 +49,6 @@ def _gradient(h, x, y):
             out[i, j] = g[0] * x[i, j] + g[1] * y[i, j]
     return out
 
-
 def _perlin(x, y, seed=0):
     np.random.seed(seed)
     p = np.arange(2**20, dtype=int)
@@ -77,7 +76,6 @@ def _perlin(x, y, seed=0):
     a = _lerp(x1, x2, v)
     return a
 
-
 def _run_numpy(data: np.ndarray,
                width: Union[int, float],
                height: Union[int, float],
@@ -104,15 +102,18 @@ def _fade_gpu(t):
     return 6 * t**5 - 15 * t**4 + 10 * t**3
 
 
+host_vec = np.array([0, 1, 0, -1, 1, 0, -1, 0], dtype=np.int32)
+
 @cuda.jit(device=True)
-def _gradient_gpu(vec, h, x, y):
+def _gradient_gpu(h, x, y):
+    vec = cuda.const.array_like(host_vec)
     f = h % 4
-    return vec[f][0] * x + vec[f][1] * y
+    return vec[2 * f] * x + vec[2 * f + 1] * y
 
 
 @cuda.jit
-def _perlin_gpu(p, vec, freq0, freq1, out):
-
+def _perlin_gpu(p, freq0, freq1, out):
+    
     i, j = cuda.grid(2)
     if i < out.shape[0] and j < out.shape[1]:
 
@@ -134,10 +135,10 @@ def _perlin_gpu(p, vec, freq0, freq1, out):
         v = _fade_gpu(yf)
 
         # noise components
-        n00 = _gradient_gpu(vec, p[p[x_int]+y_int], xf, yf)
-        n01 = _gradient_gpu(vec, p[p[x_int]+y_int+1], xf, yf-1)
-        n11 = _gradient_gpu(vec, p[p[x_int+1]+y_int+1], xf-1, yf-1)
-        n10 = _gradient_gpu(vec, p[p[x_int+1]+y_int], xf-1, yf)
+        n00 = _gradient_gpu(p[p[x_int]+y_int], xf, yf)
+        n01 = _gradient_gpu(p[p[x_int]+y_int+1], xf, yf-1)
+        n11 = _gradient_gpu(p[p[x_int+1]+y_int+1], xf-1, yf-1)
+        n10 = _gradient_gpu(p[p[x_int+1]+y_int], xf-1, yf)
 
         # combine noises
         x1 = _lerp_gpu(n00, n10, u)
@@ -146,14 +147,11 @@ def _perlin_gpu(p, vec, freq0, freq1, out):
         out[i, j] = a
     # return a
 
-
 def _run_cupy(data: cupy.ndarray,
               width: Union[int, float],
               height: Union[int, float],
               freq: tuple,
               seed: int) -> cupy.ndarray:
-
-    vec = cupy.array([[0, 1], [0, -1], [1, 0], [-1, 0]])
 
     p = cupy.arange(2**20, dtype=int)
     cupy.random.seed(seed)
@@ -167,7 +165,7 @@ def _run_cupy(data: cupy.ndarray,
 
 
     #print("data.shape, griddim, blockdim: ", data.shape, griddim, blockdim)
-    _perlin_gpu[griddim, blockdim](p, vec, freq[0], freq[1], data)
+    _perlin_gpu[griddim, blockdim](p, freq[0], freq[1], data)
 
     minimum = cupy.amin(data)
     maximum = cupy.amax(data)
