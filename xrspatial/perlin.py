@@ -112,44 +112,55 @@ def _gradient_gpu(vec, h, x, y):
 @cuda.jit
 def _perlin_gpu(p, freq0, freq1, out):
     
-    i, j = cuda.grid(2)
+    #si, sj = cuda.grid(2)
 
-    # alloc and initialize vec array
+    # alloc and initialize array to be used in the gradient routine
     vec = cuda.local.array((4, 2), nb.int32)
     vec[0][0] = vec[1][0] = vec[2][1] = vec[3][1] = 0
     vec[0][1] = vec[2][0] = 1
     vec[1][1] = vec[3][0] = -1
-   
-    if i < out.shape[0] and j < out.shape[1]:
-       # coordinates of the top-left
-        y = i * (freq0/out.shape[0])
-        x = j * (freq1/out.shape[1])
- 
-        # coordinates of the top-left
-        x_int = int(x)
-        y_int = int(y)
+    
+    # these are the i,j coordinates of the block's first thread
+    si = cuda.blockDim.y * cuda.blockIdx.y
+    sj = cuda.blockDim.x * cuda.blockIdx.x
+    
+    # while the block's elementes are still in the data's range
+    for si in range(cuda.blockDim.y * cuda.blockIdx.y, out.shape[0], cuda.gridDim.y * cuda.blockDim.y):
+        for sj in range(cuda.blockDim.x*cuda.blockIdx.x, out.shape[1], cuda.gridDim.x * cuda.blockDim.x):
+            # this the thread's element index
+            # this loop limits memory divergence
+            i = si + cuda.threadIdx.y
+            j = sj + cuda.threadIdx.x
+            if i < out.shape[0] and j < out.shape[1]:
 
-        # internal coordinates
-        xf = x - x_int
-        yf = y - y_int
+                # coordinates of the top-left
+                y = i * (freq0/out.shape[0])
+                x = j * (freq1/out.shape[1])
+     
+                # coordinates of the top-left
+                x_int = int(x)
+                y_int = int(y)
+
+                # internal coordinates
+                xf = x - x_int
+                yf = y - y_int
 
 
-        # fade factors
-        u = _fade_gpu(xf)
-        v = _fade_gpu(yf)
+                # fade factors
+                u = _fade_gpu(xf)
+                v = _fade_gpu(yf)
 
-        # noise components
-        n00 = _gradient_gpu(vec, p[p[x_int]+y_int], xf, yf)
-        n01 = _gradient_gpu(vec, p[p[x_int]+y_int+1], xf, yf-1)
-        n11 = _gradient_gpu(vec, p[p[x_int+1]+y_int+1], xf-1, yf-1)
-        n10 = _gradient_gpu(vec, p[p[x_int+1]+y_int], xf-1, yf)
+                # noise components
+                n00 = _gradient_gpu(vec, p[p[x_int]+y_int], xf, yf)
+                n01 = _gradient_gpu(vec, p[p[x_int]+y_int+1], xf, yf-1)
+                n11 = _gradient_gpu(vec, p[p[x_int+1]+y_int+1], xf-1, yf-1)
+                n10 = _gradient_gpu(vec, p[p[x_int+1]+y_int], xf-1, yf)
 
-        # combine noises
-        x1 = _lerp_gpu(n00, n10, u)
-        x2 = _lerp_gpu(n01, n11, u)
-        a = _lerp_gpu(x1, x2, v)
-        out[i, j] = a
-    # return a
+                # combine noises
+                x1 = _lerp_gpu(n00, n10, u)
+                x2 = _lerp_gpu(n01, n11, u)
+                out[i, j] = _lerp_gpu(x1, x2, v)
+
 
 def _run_cupy(data: cupy.ndarray,
               width: Union[int, float],
@@ -162,11 +173,12 @@ def _run_cupy(data: cupy.ndarray,
     cupy.random.shuffle(p)
     p = cupy.append(p, p)
 
-    griddim, blockdim = cuda_args(data.shape)
+    #griddim, blockdim = cuda_args(data.shape)
     #threads_per_block = 256
     #blockdim = (int(math.ceil(threads_per_block**(1.0/len(data.shape)))),) * len(data.shape) 
     #griddim = tuple(int(math.ceil(d / blockdim[0])) for d in data.shape)
-
+    blockdim = (24, 24)
+    griddim = (10,80)
 
     #print("data.shape, griddim, blockdim: ", data.shape, griddim, blockdim)
     _perlin_gpu[griddim, blockdim](p, freq[0], freq[1], data)
