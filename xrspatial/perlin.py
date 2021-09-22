@@ -176,13 +176,19 @@ def _perlin_gpu(p, x0, x1, y0, y1, m, out):
 def _perlin_cupy(data: cupy.ndarray,
                  freq: tuple,
                  seed: int) -> cupy.ndarray:
-    p = cupy.arange(2 ** 20, dtype=int)
-    cupy.random.seed(seed)
-    cupy.random.shuffle(p)
+    # p = cupy.arange(2 ** 20, dtype=int)
+    # cupy.random.seed(seed)
+    # cupy.random.shuffle(p)
+    np.random.seed(seed)
+    p = np.arange(2**20, dtype=int)
+    np.random.shuffle(p)
+    p = cupy.asarray(p)
     p = cupy.append(p, p)
 
-    blockdim = (24, 24)
-    griddim = tuple(int(d / blockdim[0] + 0.5) for d in data.shape)
+    griddim, blockdim = cuda_args(data.shape)
+
+    # blockdim = (24, 24)
+    # griddim = tuple(int(d / blockdim[0] + 0.5) for d in data.shape)
     _perlin_gpu[griddim, blockdim](p, 0, freq[0], 0, freq[1], 1, data)
 
     minimum = cupy.amin(data)

@@ -132,8 +132,8 @@ def _terrain_gpu(height_map, seed, x_range=(0, 1), y_range=(0, 1)):
     nrange = np.arange(2**20, dtype=int)
     
     griddim, blockdim = cuda_args(height_map.shape)
-    print("griddim:", griddim)
-    print("blockdim:", blockdim)
+    # print("griddim:", griddim)
+    # print("blockdim:", blockdim)
     #blockdim = (24, 24)
     #griddim = (10, 80)
     #print('hm: ', cupy.mean(height_map))
