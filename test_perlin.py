@@ -4,8 +4,8 @@ import dask.array as da
 import cupy as cp
 
 from xrspatial.utils import has_cuda
-from xrspatial.utils import doesnt_have_cuda
-from perlin import perlin
+#from xrspatial.utils import doesnt_have_cuda
+from xrspatial.perlin import perlin
 
 # import matplotlib.pyplot as plt
 
