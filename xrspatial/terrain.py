@@ -19,6 +19,7 @@ import dask.array as da
 
 # local modules
 from xrspatial.utils import has_cuda
+from xrspatial.utils import cuda_args
 from .perlin import _perlin, _perlin_gpu
 
 
@@ -44,6 +45,7 @@ def _gen_terrain(height_map, seed, x_range=(0, 1), y_range=(0, 1)):
     for i, (m, (xfreq, yfreq)) in enumerate(NOISE_LAYERS):
         np.random.seed(seed+i)
         p = np.random.permutation(nrange)
+        #print('seed: ', seed+i, 'p[0]: ', p[0])
         p = np.append(p, p)
 
         noise = _perlin(p, x * xfreq, y * yfreq) * m
@@ -125,14 +127,23 @@ def _terrain_gpu(height_map, seed, x_range=(0, 1), y_range=(0, 1)):
 
     NOISE_LAYERS = ((1 / 2**i, (2**i, 2**i)) for i in range(16))
 
-    noise = cupy.empty_like(height_map, dtype=np.float32)
-    nrange = cupy.arange(2**20, dtype=int)
-
-    blockdim = (24, 24)
-    griddim = (10, 80)
+    noise = cupy.zeros_like(height_map, dtype=np.float32)
+    #nrange = cupy.arange(2**20, dtype=int)
+    nrange = np.arange(2**20, dtype=int)
+    
+    griddim, blockdim = cuda_args(height_map.shape)
+    print("griddim:", griddim)
+    print("blockdim:", blockdim)
+    #blockdim = (24, 24)
+    #griddim = (10, 80)
+    #print('hm: ', cupy.mean(height_map))
+    #print('noise: ', cupy.mean(noise))
     for i, (m, (xfreq, yfreq)) in enumerate(NOISE_LAYERS):
-        cupy.random.seed(seed+i)
-        p = cupy.random.permutation(nrange)
+        #cupy.random.seed(seed+i)
+        #p = cupy.random.permutation(nrange)
+        np.random.seed(seed+i)
+        p = cupy.asarray(np.random.permutation(nrange))
+        print('seed: ', seed+i, 'p[0]: ', p[0])
         p = cupy.append(p, p)
 
         _perlin_gpu[griddim, blockdim](
