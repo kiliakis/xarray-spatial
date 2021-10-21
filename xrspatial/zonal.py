@@ -26,6 +26,12 @@ def _stats_count(data):
     if isinstance(data, np.ndarray):
         # numpy case
         stats_count = np.ma.count(data)
+    elif isinstance(data, cupy.ndarray):
+        # cupy case
+        # TODO validate count function
+        stats_count = 1
+        for dim in data.shape:
+            stats_count *= dim
     else:
         # dask case
         stats_count = data.size - da.ma.getmaskarray(data).sum()
@@ -42,6 +48,17 @@ _DEFAULT_STATS = dict(
     count=lambda z: _stats_count(z),
 )
 
+# TODO
+# validate that cupy arrays can call stats functions like this
+_DEFAULT_STATS_CUPY = dict(
+    mean=lambda z: z.mean(),
+    max=lambda z: z.max(),
+    min=lambda z: z.min(),
+    sum=lambda z: z.sum(),
+    std=lambda z: z.std(),
+    var=lambda z: z.var(),
+    count=lambda z: _stats_count(z),
+)
 
 def _to_int(numeric_value):
     # convert an integer in float type to integer type
@@ -131,6 +148,10 @@ def _stats_cupy(
     nodata_zones: Union[int, float],
     nodata_values: Union[int, float],
 ) -> pd.DataFrame:
+    
+    # TODO support 3D input
+    if len(values.shape) > 2:
+        raise TypeError('More than 2D not supported for cupy backend')
 
     if zone_ids is None:
         # TODO time this operation
@@ -142,6 +163,8 @@ def _stats_cupy(
         unique_zones = cupy.array(unique_zones)
     else:
         unique_zones = cupy.array(zone_ids)
+
+
 
     # I need to prepare the kernel call
     # perhaps divide it into multiple kernels
@@ -169,10 +192,16 @@ def _stats_cupy(
     # first with zone_cat_data, collect all the values into multiple arrays
 
     # then iterate over the arrays and apply the stat funcs
-
+    values_cond = cupy.isfinite(values) & (values != nodata_values)
     for zone_id in unique_zones:
         # get zone values
-        zone_values = _zone_cat_data(zones, values, zone_id, nodata_values)
+        # Here I need a kernel to return 0 for elements not included, 1 for 
+        # elements to be included
+        # If this doesn't work, then I extract the index and pass it to the kernel
+        zone_values = zones[values_cond & (zones == zone_id)]
+
+        # nonzero_idx = cupy.nonzero(values_cond & (zone_values == zone_id))
+        # zone_values = _zone_cat_data(zones, values, zone_id, nodata_values)
         for stats in stats_funcs:
             stats_func = stats_funcs.get(stats)
             if not callable(stats_func):
@@ -416,23 +445,34 @@ def stats(
     ):
         raise ValueError("`values` must be an array of integers or floats.")
 
-    if isinstance(stats_funcs, list):
+    if not isinstance(values.data, type(zones.data)):
+        raise TypeError("`values` and zones must be of same datatype")
+
+    # TODO check that these lines work, figure out a way with less code replication
+    if isinstance(stats_funcs, list) and isinstance(values.data, cupy.ndarray):
         # create a dict of stats
         stats_funcs_dict = {}
 
+        for stats in stats_funcs:
+            func = _DEFAULT_STATS_CUPY.get(stats, None)
+            if func is None:
+                err_str = f"Invalid stat name. {stats} option not supported."
+                raise ValueError(err_str)
+            stats_funcs_dict[stats] = func
+
+    if isinstance(stats_funcs, list):
+        # create a dict of stats
+        stats_funcs_dict = {}
         for stats in stats_funcs:
             func = _DEFAULT_STATS.get(stats, None)
             if func is None:
                 err_str = f"Invalid stat name. {stats} option not supported."
                 raise ValueError(err_str)
-
             stats_funcs_dict[stats] = func
 
     elif isinstance(stats_funcs, dict):
         stats_funcs_dict = stats_funcs.copy()
 
-    if not isinstance(values.data, type(zones.data)):
-        raise TypeError("`values` and zones must be of same datatype")
 
     if isinstance(values.data, np.ndarray):
         # numpy case
@@ -446,6 +486,7 @@ def stats(
         )
     elif has_cuda() and isinstance(values.data, cupy.ndarray):
         # cupy case
+        # Here I need the GPU supported stats
         stats_df = _stats_cupy(
             zones,
             values,
