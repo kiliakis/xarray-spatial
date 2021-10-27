@@ -137,7 +137,7 @@ def _stats(
 
     return stats_dict
 
-
+# TODO: flatten zones and values
 def _stats_cupy(
     zones: xr.DataArray,
     values: xr.DataArray,
@@ -156,7 +156,8 @@ def _stats_cupy(
         # if it takes too long, then I need to figure out a better way
         # no zone_ids provided, find ids for all zones
         # do not consider zone with nodata values
-        unique_zones = np.unique(zones.data[np.isfinite(zones.data)])
+
+        unique_zones = cupy.asnumpy(zones.data)
         unique_zones = sorted(list(set(unique_zones) - set([nodata_zones])))
         unique_zones = cupy.array(unique_zones)
     else:
@@ -190,7 +191,7 @@ def _stats_cupy(
     # first with zone_cat_data, collect all the values into multiple arrays
 
     # then iterate over the arrays and apply the stat funcs
-    values_cond = cupy.isfinite(values) & (values != nodata_values)
+    values_cond = cupy.isfinite(values.data) & (values.data != nodata_values)
     for zone_id in unique_zones:
         # get zone values
         # Here I need a kernel to return 0 for elements not included, 1 for 
